@@ -1030,8 +1030,13 @@ class ReleaseController:
             with open(os.path.join(temp_dir, "README.md"), 'w') as f:
                 f.write(readme_content)
             
-            # Create ZIP file
-            releases_dir = os.path.join("backend", "releases")
+            # Create ZIP file in project-specific folder
+            # Get project name for folder structure
+            project = self.db.query(Project).filter(Project.id == config.project_id).first()
+            project_name = project.name if project else f"project_{config.project_id}"
+            
+            # Create project-specific releases directory
+            releases_dir = os.path.join("projects", project_name, "releases")
             os.makedirs(releases_dir, exist_ok=True)
             
             zip_filename = f"{release.name.replace(' ', '_')}_{config.export_format}.zip"
