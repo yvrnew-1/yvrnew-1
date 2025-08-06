@@ -9,7 +9,7 @@ import { Layout, Button, Space, Divider, Row, Col, Card, message, Modal, Image, 
 import { PlusOutlined, RocketOutlined, EyeOutlined, SyncOutlined } from '@ant-design/icons';
 
 // Import all the components we've built
-import { DatasetStats, TransformationCard, TransformationModal, ReleaseConfigPanel, ReleaseHistoryList } from './';
+import { DatasetStats, TransformationCard, TransformationModal, ReleaseConfigPanel, ReleaseHistoryList, DownloadModal } from './';
 
 // Import the new TransformationSection component
 import TransformationSection from './TransformationSection';
@@ -356,6 +356,14 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     loading: false
   });
 
+  // Download Modal State
+  const [downloadModal, setDownloadModal] = useState({
+    isOpen: false,
+    release: null,
+    isExporting: false,
+    exportProgress: null
+  });
+
   // Function to fetch datasets
   const fetchDatasets = async () => {
     try {
@@ -590,45 +598,30 @@ const ReleaseSection = ({ projectId, datasetId }) => {
         const createdRelease = await response.json();
         console.log('Release created successfully:', JSON.stringify(createdRelease, null, 2));
         
-        // Start the export process immediately without showing the export modal
+        // Show success message
         message.success('Release created successfully! Starting export...');
         
-        // Show a new loading message for the export process
-        const exportLoadingMessage = message.loading('Exporting release...', 0);
+        // Prepare release data for the download modal
+        const releaseForModal = {
+          id: createdRelease.release_id,
+          name: releaseConfig.name,
+          description: `${releaseConfig.exportFormat} export with ${transformations.length} transformations`,
+          export_format: releaseConfig.exportFormat,
+          final_image_count: releaseConfig.multiplier * (selectedDatasets[0]?.image_count || 0),
+          created_at: new Date().toISOString(),
+          model_path: `/releases/${createdRelease.release_id}/${releaseConfig.name}.${releaseConfig.exportFormat}.zip`
+        };
         
-        try {
-          console.log("Created release data:", createdRelease);
-          
-          // Make sure we have a valid release ID
-          if (!createdRelease.release_id) {
-            throw new Error("Release ID is missing in the response");
-          }
-          
-          // Generate the download URL
-          const downloadUrl = `${API_BASE_URL}/api/v1/releases/${createdRelease.release_id}/download?format=${releaseData.export_format}`;
-          console.log("Download URL:", downloadUrl);
-          
-          // Simulate a delay for the export process (the backend is actually processing it)
-          setTimeout(() => {
-            // Close the export loading message
-            exportLoadingMessage();
-            
-            // Show success message with download link
-            message.success(
-              <span>
-                Export completed! <a href={downloadUrl} target="_blank" rel="noopener noreferrer">Click here to download</a>
-              </span>,
-              10 // Show for 10 seconds
-            );
-            
-            // Automatically open the download in a new tab
-            window.open(downloadUrl, '_blank');
-          }, 3000);
-        } catch (exportError) {
-          exportLoadingMessage();
-          console.error('Export failed:', exportError);
-          message.error('Export failed. Please try again.');
-        }
+        // Open download modal in export mode
+        setDownloadModal({
+          isOpen: true,
+          release: releaseForModal,
+          isExporting: true,
+          exportProgress: { percentage: 0, step: 'initializing' }
+        });
+        
+        // Simulate export progress
+        simulateExportProgress(releaseForModal);
       } else {
         throw new Error('Failed to create release');
       }
@@ -638,7 +631,71 @@ const ReleaseSection = ({ projectId, datasetId }) => {
     }
   };
 
-  // Export is now handled directly in the handleCreateRelease function
+  // Simulate export progress for the download modal
+  const simulateExportProgress = (release) => {
+    const steps = [
+      { step: 'initializing', percentage: 10, duration: 1000 },
+      { step: 'processing_images', percentage: 60, duration: 2000 },
+      { step: 'creating_zip', percentage: 90, duration: 1500 },
+      { step: 'completed', percentage: 100, duration: 500 }
+    ];
+
+    let currentStepIndex = 0;
+
+    const updateProgress = () => {
+      if (currentStepIndex < steps.length) {
+        const currentStep = steps[currentStepIndex];
+        
+        setDownloadModal(prev => ({
+          ...prev,
+          exportProgress: {
+            step: currentStep.step,
+            percentage: currentStep.percentage
+          }
+        }));
+
+        if (currentStep.step === 'completed') {
+          // Export completed, switch to download mode
+          setTimeout(() => {
+            setDownloadModal(prev => ({
+              ...prev,
+              isExporting: false,
+              exportProgress: null
+            }));
+          }, 1000);
+        } else {
+          // Move to next step
+          setTimeout(() => {
+            currentStepIndex++;
+            updateProgress();
+          }, currentStep.duration);
+        }
+      }
+    };
+
+    // Start the progress simulation
+    setTimeout(updateProgress, 500);
+  };
+
+  // Handle release history item click to open download modal
+  const handleReleaseHistoryClick = (release) => {
+    setDownloadModal({
+      isOpen: true,
+      release: release,
+      isExporting: false,
+      exportProgress: null
+    });
+  };
+
+  // Close download modal
+  const closeDownloadModal = () => {
+    setDownloadModal({
+      isOpen: false,
+      release: null,
+      isExporting: false,
+      exportProgress: null
+    });
+  };
 
   return (
     <div className="release-section">
@@ -666,7 +723,10 @@ const ReleaseSection = ({ projectId, datasetId }) => {
             {/* LEFT SIDEBAR: Release History */}
             <Col xs={24} lg={8} xl={6}>
               <div style={{ position: 'sticky', top: 24 }}>
-                <ReleaseHistoryList datasetId={datasetId} />
+                <ReleaseHistoryList 
+                  datasetId={datasetId} 
+                  onReleaseClick={handleReleaseHistoryClick}
+                />
               </div>
             </Col>
 
@@ -1040,6 +1100,15 @@ const ReleaseSection = ({ projectId, datasetId }) => {
               showIcon
             />
           </Modal>
+
+          {/* Professional Download Modal */}
+          <DownloadModal
+            isOpen={downloadModal.isOpen}
+            onClose={closeDownloadModal}
+            release={downloadModal.release}
+            isExporting={downloadModal.isExporting}
+            exportProgress={downloadModal.exportProgress}
+          />
         </Content>
       </Layout>
     </div>

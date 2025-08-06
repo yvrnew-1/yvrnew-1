@@ -7,7 +7,7 @@ import { API_BASE_URL } from '../../../config';
 
 const { confirm } = Modal;
 
-const ReleaseHistoryList = ({ datasetId, onReleaseSelect }) => {
+const ReleaseHistoryList = ({ datasetId, onReleaseSelect, onReleaseClick }) => {
   const [releases, setReleases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingRelease, setEditingRelease] = useState(null);
@@ -228,9 +228,11 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect }) => {
                 border: '1px solid #f0f0f0',
                 borderRadius: '8px',
                 backgroundColor: '#fafafa',
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s ease',
+                cursor: 'pointer'
               }}
               className="release-history-item"
+              onClick={() => onReleaseClick && onReleaseClick(release)}
               hoverable
             >
               {/* Release Header */}
@@ -292,7 +294,10 @@ const ReleaseHistoryList = ({ datasetId, onReleaseSelect }) => {
                 <Tooltip title="Download">
                   <Button 
                     icon={<DownloadOutlined />} 
-                    onClick={() => handleDownload(release)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent card click
+                      onReleaseClick && onReleaseClick(release);
+                    }}
                     type="primary"
                     size="small"
                     style={{ flex: 1 }}
