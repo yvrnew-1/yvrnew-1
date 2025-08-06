@@ -1113,5 +1113,134 @@ Detailed Implementation Plan:**
 
 ---
 
-*Document updated: 2025-08-05*
-*Latest: Task 6 - Multiple Dataset Handling Complete*
+## 🚨 CRITICAL ISSUE DISCOVERED AFTER TASK 7.5: ZIP DOWNLOAD BUG
+
+**Status:** 🔄 **IDENTIFIED & SOLUTION READY** | **Priority:** CRITICAL - BLOCKING PRODUCTION
+
+### **🔍 ISSUE DESCRIPTION:**
+
+**Problem:** ZIP files downloaded from releases contain only "dummy content" instead of real images and labels.
+
+**Root Cause Analysis:**
+1. **Frontend calls:** `/api/v1/releases/create` endpoint
+2. **Backend endpoint:** `/releases/create` in `releases.py` (line 244)
+3. **Bug location:** `f.write("dummy content")` - Creates fake ZIP instead of real one
+4. **Wrong file system structure:** Releases stored in `/backend/backend/releases/` instead of project-specific folders
+5. **Impact:** Users download empty ZIP files, making the entire release system non-functional
+
+**Evidence Found:**
+```bash
+# ZIP file created with only 13 bytes
+/workspace/project/yvrnew-1/backend/backend/releases/153ab2eb-0ed6-40c0-8030-3cfde4e98ca9/version_auto_2025_08_06_09_14.yolo_detection.zip
+
+# Content: "dummy content" (not a real ZIP file)
+```
+
+**Why This Happened:**
+- The `/releases/create` endpoint was using placeholder/dummy implementation
+- Proper ZIP creation system exists in `ReleaseController.generate_release()` but wasn't being used
+- Frontend was calling the wrong endpoint that creates dummy files
+- **File system structure issue:** Releases stored in generic backend folder instead of project-specific folders
+
+### **🎯 PERFECT SOLUTION:**
+
+**Strategy:** Replace dummy implementation with proper release controller integration + Fix file system structure
+
+**Implementation Steps:**
+
+1. **Fix Backend Endpoint** (`/backend/api/routes/releases.py`):
+   ```python
+   # BEFORE (BROKEN):
+   dummy_export_path = os.path.join(release_path, f"{payload.version_name}.{payload.export_format.lower()}.zip")
+   with open(dummy_export_path, "w") as f:
+       f.write("dummy content")
+   
+   # AFTER (FIXED):
+   controller = create_release_controller(db)
+   config = ReleaseConfig(...)
+   release_id = controller.generate_release(config, payload.version_name)
+   ```
+
+2. **Use Proper ZIP Creation System:**
+   - `ReleaseController.generate_release()` - Main orchestration
+   - `ReleaseController.create_zip_package()` - Real ZIP with images/labels
+   - Proper directory structure: images/, labels/, metadata/, README.md
+
+3. **Fix File System Structure (CRITICAL):**
+   ```bash
+   # CURRENT (WRONG):
+   /workspace/project/yvrnew-1/backend/backend/releases/
+   
+   # SHOULD BE (PROJECT-SPECIFIC):
+   /workspace/project/yvrnew-1/projects/{project_name}/releases/
+   
+   # Examples:
+   /workspace/project/yvrnew-1/projects/gevis/releases/
+   /workspace/project/yvrnew-1/projects/defects/releases/
+   /workspace/project/yvrnew-1/projects/cars/releases/
+   ```
+   
+   **Benefits:**
+   - Each project has its own releases folder
+   - Automatic organization based on project name
+   - Easy to find and manage project-specific releases
+   - Follows existing project-based folder structure
+
+4. **Verification Steps:**
+   - Test ZIP download contains real images (not dummy content)
+   - Verify labels are included in proper format (YOLO, COCO, etc.)
+   - Check ZIP structure matches expected format
+   - Ensure file sizes are realistic (not 13 bytes)
+   - Verify releases are stored in correct project-specific folders
+
+**Files to Modify:**
+- ✅ `/backend/api/routes/releases.py` - Replace dummy implementation
+- 🔄 `/backend/core/release_controller.py` - Update release path to use project-specific folders
+- 🔄 Test the fix with actual release creation
+- 🔄 Verify ZIP contents are real images/labels
+- 🔄 Verify releases are stored in correct project-specific folders
+
+**Expected Result:**
+- ZIP files contain actual transformed images
+- Labels are properly formatted for the selected export format
+- File sizes are realistic (MB/GB instead of bytes)
+- Users can successfully use downloaded datasets
+- **CRITICAL: Releases automatically organized by project in /projects/{project_name}/releases/**
+- **Dynamic project-based folder creation:** gevis -> /projects/gevis/releases/, defects -> /projects/defects/releases/
+
+### **🚀 IMPLEMENTATION STATUS:**
+- ✅ **Root cause identified** - Dummy content in releases.py line 244
+- ✅ **Solution designed** - Use proper ReleaseController.generate_release()
+- ✅ **File system structure requirement identified** - Project-specific folders needed
+- 🔄 **Code fix applied** - Backend endpoint updated
+- ❌ **Testing pending** - Need to verify ZIP contains real content
+- ❌ **Production validation pending** - Full end-to-end test
+
+**Next Session Priority:** Test the fix and verify ZIP downloads work correctly before implementing the special task.
+
+---
+
+## 🎨 SPECIAL TASK AFTER 7.5: PROFESSIONAL DOWNLOAD MODAL
+
+**Status:** ❌ **PENDING** | **Priority:** HIGH - UX Enhancement | **Depends on:** ZIP Bug Fix
+
+**Description:** Design a professional download experience for releases with an on-screen modal instead of automatically opening a new browser tab.
+
+**Requirements:**
+- After clicking "Create Release", show an on-screen modal with export progress
+- Display a progress bar showing the export status with descriptive steps
+- When export is complete, provide multiple download options:
+  - Copy link button for terminal download with curl command example
+  - Copy to clipboard functionality
+  - **Manual download button** - Direct ZIP file download
+- Automatically update the release history list when export is complete
+- Allow users to access download options later by clicking on releases in the history list
+- **Release history interaction:** Click on any release in history to open download modal with:
+  - Manual download button (direct ZIP download)
+  - Copy download link option
+  - Terminal command examples
+
+---
+
+*Document updated: 2025-08-06*
+*Latest: Task 7.5 Complete + Critical ZIP Bug Identified + Project-Specific Folder Requirement*
