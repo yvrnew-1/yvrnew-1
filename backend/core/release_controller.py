@@ -339,8 +339,10 @@ class ReleaseController:
                 current_step="processing_images"
             )
             
-            # Initialize augmentation engine
-            output_dir = f"backend/releases/{release_id}"
+            # Initialize augmentation engine with project-specific path
+            project = self.db.query(Project).filter(Project.id == config.project_id).first()
+            project_name = project.name if project else f"project_{config.project_id}"
+            output_dir = os.path.join("projects", project_name, "releases", release_id)
             self.augmentation_engine = create_augmentation_engine(output_dir)
             
             # Prepare image paths and dataset splits with multi-dataset support
@@ -1093,11 +1095,18 @@ class ReleaseController:
             logger.error(f"Failed to get release history: {str(e)}")
             return []
     
-    def cleanup_failed_release(self, release_id: str) -> None:
+    def cleanup_failed_release(self, release_id: str, project_id: int = None) -> None:
         """Clean up resources for a failed release"""
         try:
-            # Remove output directory if it exists
-            output_dir = Path(f"backend/releases/{release_id}")
+            # Remove output directory if it exists - use project-specific path
+            if project_id:
+                project = self.db.query(Project).filter(Project.id == project_id).first()
+                project_name = project.name if project else f"project_{project_id}"
+                output_dir = Path(os.path.join("projects", project_name, "releases", release_id))
+            else:
+                # Fallback to old path for backward compatibility
+                output_dir = Path(f"backend/releases/{release_id}")
+            
             if output_dir.exists():
                 import shutil
                 shutil.rmtree(output_dir)

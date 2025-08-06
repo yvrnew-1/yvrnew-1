@@ -31,7 +31,7 @@ from pydantic import BaseModel
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-RELEASE_ROOT_DIR = "backend/releases"
+# Note: Release paths are now project-specific: /projects/{project_name}/releases/
 
 # New enhanced release generation models
 class EnhancedReleaseCreate(BaseModel):
@@ -210,38 +210,25 @@ def create_release(payload: ReleaseCreate, db: Session = Depends(get_db)):
         if not dataset:
             raise HTTPException(status_code=404, detail="Dataset not found")
 
-        # Gather original + augmented image count
-        total_original = db.query(Image).filter(Image.dataset_id == dataset.id).count()
-        total_augmented = total_original * (payload.multiplier - 1)
-        final_image_count = total_original + total_augmented
-
-        # Create release folder
-        release_id = str(uuid.uuid4())
-        release_path = os.path.join(RELEASE_ROOT_DIR, release_id)
-        os.makedirs(release_path, exist_ok=True)
-
-        # Save config.json
-        config_data = {
-            "version_name": payload.version_name,
-            "dataset_id": payload.dataset_id,
-            "description": payload.description,
-            "transformations": payload.transformations,
-            "multiplier": payload.multiplier,
-            "preserve_annotations": payload.preserve_annotations,
-            "export_format": payload.export_format,
-            "task_type": payload.task_type,
-            "include_images": payload.include_images,
-            "include_annotations": payload.include_annotations,
-            "verified_only": payload.verified_only,
-        }
-        config_path = os.path.join(release_path, "config.json")
-        with open(config_path, 'w') as f:
-            json.dump(config_data, f, indent=4)
-
-        # Simulate export file (placeholder)
-        dummy_export_path = os.path.join(release_path, f"{payload.version_name}.{payload.export_format.lower()}.zip")
-        with open(dummy_export_path, "w") as f:
-            f.write("dummy content")
+        # Create release controller
+        controller = create_release_controller(db)
+        
+        # Create release configuration
+        config = ReleaseConfig(
+            project_id=dataset.project_id,
+            dataset_ids=[payload.dataset_id],
+            release_name=payload.version_name,
+            description=payload.description,
+            export_format=payload.export_format,
+            task_type=payload.task_type,
+            include_images=payload.include_images,
+            include_annotations=payload.include_annotations,
+            verified_only=payload.verified_only,
+            split_sections=["train", "val", "test"]  # Default split sections
+        )
+        
+        # Generate the release using the proper controller
+        release_id = controller.generate_release(config, payload.version_name)
 
         # Save release to DB
         release = Release(
